@@ -301,9 +301,11 @@ pub async fn native_transfer_block_processor(
             buffer.len()
         };
 
+        // recv_many returns 0 only when the channel is closed and empty, which
+        // means the fetcher has exited and no more blocks will arrive.
         if recv == 0 {
-            sleep(Duration::from_secs(1)).await;
-            continue;
+            info!("Exiting native transfer block processor for {}: channel closed", network_name);
+            break Ok(());
         }
 
         let processed_block = native_transfer_block_consumer(

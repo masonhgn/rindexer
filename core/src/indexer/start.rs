@@ -173,6 +173,7 @@ async fn start_indexing_traces(
     clickhouse: Option<Arc<ClickhouseClient>>,
     indexer: &Indexer,
     trace_registry: Arc<TraceCallbackRegistry>,
+    no_live_indexing_forced: bool,
     cancel_token: CancellationToken,
     progress: Arc<IndexingEventsProgressState>,
 ) -> Result<Vec<JoinHandle<Result<(), ProcessEventError>>>, StartIndexingError> {
@@ -261,11 +262,17 @@ async fn start_indexing_traces(
             cancel_token: cancel_token.clone(),
         });
 
+        // In historical phase we stop at end_block so the task can finish and the
+        // orchestrator can hand off to live. In live phase we pass None so the
+        // fetcher polls new blocks indefinitely, matching how contract events use
+        // `live_indexing: true` to keep running past their historical range.
+        let fetcher_end_block = if no_live_indexing_forced { Some(end_block) } else { None };
+
         let block_fetch_handle = tokio::spawn(native_transfer_block_fetch(
             network_details.cached_provider.clone(),
             block_tx,
             start_block,
-            network_details.end_block,
+            fetcher_end_block,
             indexing_distance_from_head,
             network_name.clone(),
             cancel_token.clone(),
@@ -638,6 +645,7 @@ async fn start_indexing(
             clickhouse.clone(),
             &indexer,
             trace_registry.clone(),
+            no_live_indexing_forced,
             cancel_token.clone(),
             progress.clone(),
         ),
